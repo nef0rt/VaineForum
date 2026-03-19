@@ -1,0 +1,10 @@
+{
+  "name": "vaine-forum",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "formidable": "^3.5.1"
+  }
+}
